@@ -1,0 +1,54 @@
+{
+  "metadata": {"name": "shop-api-staging-2-orders", "namespace": "argocd"},
+  "spec": {
+    "project": "orders",
+    "destination": {"name": "staging-2", "namespace": "shop-api"},
+    "source": {
+      "repoURL": "https://git.example.com/shop/deploy.git",
+      "path": "k8s/shop-api/qa/staging-2",
+      "targetRevision": "HEAD"
+    },
+    "syncPolicy": {"syncOptions": ["ServerSideApply=true"]}
+  },
+  "status": {
+    "sync": {"status": "OutOfSync", "revision": "f012857ba518e6238b96cf2bf0621107da3d6381"},
+    "health": {"status": "Degraded", "lastTransitionTime": "2026-10-15T07:31:02Z"},
+    "operationState": {
+      "operation": {
+        "sync": {"revision": "f4f2324178d1644d2873b9df144f712effd3fa55"},
+        "initiatedBy": {"username": "someone@example.com"}
+      },
+      "phase": "Failed",
+      "message": "one or more objects failed to apply, reason: admission webhook \"validate.nginx.ingress.kubernetes.io\" denied the request: nginx.ingress.kubernetes.io/configuration-snippet annotation cannot be used. Snippet directives are disabled by the Ingress administrator",
+      "startedAt": "2026-10-15T06:20:19Z",
+      "finishedAt": "2026-10-15T06:20:20Z",
+      "syncResult": {"revision": "f4f2324178d1644d2873b9df144f712effd3fa55"}
+    },
+    "conditions": [
+      {"type": "SyncError", "message": "Failed sync attempt to f4f2324178d1644d2873b9df144f712effd3fa55: one or more objects failed to apply", "lastTransitionTime": "2026-10-15T06:20:20Z"},
+      {"type": "SharedResourceWarning", "message": "ConfigMap/nginx-config is part of applications argocd/shop-api-staging-2-orders and shop-web-staging-2-orders", "lastTransitionTime": "2026-10-01T10:00:00Z"},
+      {"type": "SharedResourceWarning", "message": "Service/shop-api is part of applications argocd/shop-api-staging-2-orders and shop-web-staging-2-orders", "lastTransitionTime": "2026-10-01T10:00:00Z"},
+      {"type": "SharedResourceWarning", "message": "Ingress/shop-api is part of applications argocd/shop-api-staging-2-orders and shop-web-staging-2-orders", "lastTransitionTime": "2026-10-01T10:00:00Z"},
+      {"type": "SharedResourceWarning", "message": "ServiceMonitor/shop-api is part of applications argocd/shop-api-staging-2-orders and shop-web-staging-2-orders", "lastTransitionTime": "2026-10-01T10:00:00Z"}
+    ],
+    "summary": {
+      "images": ["registry.example.com/shop/shop-api:11.4.3", "nginx:1.27-alpine"],
+      "externalURLs": ["https://shop.staging.example.com/"]
+    },
+    "resources": [
+      {"version": "v1", "kind": "ConfigMap", "namespace": "shop-api", "name": "nginx-config", "status": "Synced"},
+      {"version": "v1", "kind": "ConfigMap", "namespace": "shop-api", "name": "shop-api-old", "status": "OutOfSync", "requiresPruning": true},
+      {"version": "v1", "kind": "Service", "namespace": "shop-api", "name": "shop-api", "status": "Synced", "health": {"status": "Healthy"}},
+      {"group": "apps", "version": "v1", "kind": "Deployment", "namespace": "shop-api", "name": "shop-api", "status": "Synced", "health": {"status": "Healthy"}},
+      {"group": "apps", "version": "v1", "kind": "Deployment", "namespace": "shop-api", "name": "shop-api-worker", "status": "OutOfSync", "health": {"status": "Degraded", "message": "Deployment \"shop-api-worker\" exceeded its progress deadline"}},
+      {"group": "apps", "version": "v1", "kind": "Deployment", "namespace": "shop-api", "name": "shop-api-cron", "status": "OutOfSync", "health": {"status": "Missing", "message": "Resource has not been created"}},
+      {"group": "argoproj.io", "version": "v1alpha1", "kind": "Rollout", "namespace": "shop-api", "name": "bg-shop-api", "status": "Synced", "health": {"status": "Suspended", "message": "BlueGreenPause"}},
+      {"group": "batch", "version": "v1", "kind": "Job", "namespace": "shop-api", "name": "shop-api-migrate", "status": "Synced", "hook": true, "health": {"status": "Healthy"}},
+      {"group": "keda.sh", "version": "v1alpha1", "kind": "ScaledJob", "namespace": "shop-api", "name": "shop-api-import", "status": "Synced", "health": {"status": "Healthy"}},
+      {"group": "monitoring.coreos.com", "version": "v1", "kind": "ServiceMonitor", "namespace": "monitoring", "name": "shop-api", "status": "Synced"},
+      {"group": "networking.k8s.io", "version": "v1", "kind": "Ingress", "namespace": "shop-api", "name": "shop-api", "status": "OutOfSync", "health": {"status": "Healthy"}}
+    ],
+    "reconciledAt": "2026-10-15T08:18:40Z",
+    "resourceHealthSource": "appTree"
+  }
+}

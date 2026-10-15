@@ -1,0 +1,107 @@
+[
+  {
+    "metadata": {"name": "audit-log-team-apps", "namespace": "argocd", "labels": {"argocd.cluster": "prod-eu-1"}},
+    "spec": {
+      "project": "team-apps",
+      "destination": {"name": "prod-eu-1", "namespace": "team-apps-audit-log"},
+      "syncPolicy": {"automated": {"prune": true, "selfHeal": true}}
+    },
+    "status": {
+      "sync": {"status": "Synced", "revision": "4f1c2a9"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "datadog-prod-eu-1-datadog", "namespace": "argocd"},
+    "spec": {
+      "project": "datadog",
+      "destination": {"name": "prod-eu-1", "namespace": "datadog"},
+      "syncPolicy": {"automated": {}}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "jobs-worker-import-dev", "namespace": "argocd"},
+    "spec": {
+      "project": "jobs",
+      "destination": {"name": "staging-1", "namespace": "jobs"},
+      "syncPolicy": {"automated": {"prune": true}}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "jobs-worker-import-qa", "namespace": "argocd"},
+    "spec": {
+      "project": "jobs",
+      "destination": {"name": "staging-1", "namespace": "jobs-qa"}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "jobs-worker-import-prod", "namespace": "argocd"},
+    "spec": {
+      "project": "jobs-prod",
+      "destination": {"name": "prod-us-1", "namespace": "jobs"},
+      "syncPolicy": {"syncOptions": ["CreateNamespace=true"]}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "orders-consumer-staging-2-orders", "namespace": "argocd"},
+    "spec": {
+      "project": "orders",
+      "destination": {"name": "staging-2", "namespace": "orders"}
+    },
+    "status": {
+      "sync": {"status": "OutOfSync"},
+      "health": {"status": "Missing"}
+    }
+  },
+  {
+    "metadata": {"name": "platform-tools", "namespace": "argocd"},
+    "spec": {
+      "project": "default",
+      "destination": {"server": "https://kubernetes.default.svc", "namespace": "argocd"}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "backstage-tools-1-backstage", "namespace": "argocd"},
+    "spec": {
+      "project": "backstage",
+      "destination": {"name": "tools-1", "namespace": "backstage"},
+      "syncPolicy": {"automated": {"selfHeal": true}}
+    },
+    "status": {
+      "sync": {"status": "Synced"},
+      "health": {"status": "Healthy"}
+    }
+  },
+  {
+    "metadata": {"name": "paused-example", "namespace": "argocd"},
+    "spec": {
+      "project": "default",
+      "destination": {"name": "dev-1", "namespace": "paused"},
+      "syncPolicy": {"automated": {"enabled": false}}
+    },
+    "status": {
+      "sync": {"status": "OutOfSync"},
+      "health": {"status": "Healthy"}
+    }
+  }
+]
