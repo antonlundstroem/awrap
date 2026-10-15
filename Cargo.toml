@@ -5,6 +5,8 @@ edition = "2024"
 description = "Find an Argo CD app and act on it"
 
 [dependencies]
+# The version skim uses, for the terminal's width.
+crossterm = { version = "0.29", default-features = false }
 # The version skim draws with, for coloring picker rows.
 ratatui = { version = "0.30", default-features = false }
 serde = { version = "1", features = ["derive"] }

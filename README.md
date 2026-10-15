@@ -34,14 +34,14 @@ aw <command> [query] [-- flags]    pick an app, run the command on it
 
 | short | command   | runs                                                  |
 |-------|-----------|-------------------------------------------------------|
-| `g`   | get       | `argocd app get <app>`                                |
+| `g`   | get       | `argocd app get <app>`, shown like the picker's pane  |
 | `d`   | diff      | `argocd app diff <app>`                               |
 | `s`   | sync      | `argocd app sync <app>`, after asking                 |
 | `l`   | logs      | `argocd app logs <app>`                               |
 | `h`   | history   | `argocd app history <app>`                            |
 | `m`   | manifests | `argocd app manifests <app>`                          |
 | `w`   | wait      | `argocd app wait <app>`                               |
-| `r`   | refresh   | `argocd app get <app> --refresh`                      |
+| `r`   | refresh   | `argocd app get <app> --refresh`, shown the same way  |
 | `rs`  | restart   | `argocd app actions run <app> restart …`, after asking |
 | `dp`  | deploy    | refresh, sync if needed, wait                         |
 
@@ -80,6 +80,12 @@ Commands that only read run straight away: get, get-resource, diff, history,
 logs, manifests, resources, wait and refresh. Everything else shows the
 argocd command and the app's cluster, then asks `[y/N]`; anything but `y`
 runs nothing. Set `AW_YES=1` to stop asking (`set -Ux AW_YES 1` in fish).
+
+### get and refresh
+
+They print the app the way the picker's pane shows it, laid out to the
+terminal's width, in color when printing to a terminal. With flags after `--`
+they print argocd's own output instead: `aw g billing -- -o yaml`.
 
 ### deploy
 

@@ -110,6 +110,11 @@ instance go in the gitignored `FINDINGS.local.md`. Sources at the end.
   circle-notch otherwise.
 - Nerd Fonts carry these as glyphs; the heart-crack (U+EF4F) and ghost
   (U+EEFE) arrived in Nerd Fonts 3.2.0.
+- argocd's own text output has no colors. `app get` prints its resources as
+  a tabwriter table (`GROUP KIND NAMESPACE NAME STATUS HEALTH HOOK MESSAGE`);
+  `app wait`, `sync` and `rollback` print a row like it, with a timestamp,
+  each time a resource changes. `app delete` asks before a cascading delete
+  only when its stdout is a terminal.
 - skim runs a preview command with `/bin/sh -c` in a pty the size of the
   pane, with `COLUMNS` and `ROWS` set; `COLUMNS` counts the pane's border
   column. Lines are cut at the pane's edge, not wrapped, unless the preview
@@ -235,6 +240,13 @@ Made 2026-10-15.
   words. Unknown sync gets a question mark like Unknown health, not the UI's
   spinner, which a still picture would show as progress. Fields have icons
   too. This needs a Nerd Font 3.2 or newer in the terminal.
+- **get and refresh print the pane's view** to the terminal, unless given
+  flags after `--`, which get `argocd app get`'s own output. The view is laid
+  out to the width `crossterm::terminal::size()` reads from `/dev/tty`, so
+  piped output keeps it (fish doesn't export `COLUMNS`), and has colors only
+  when stdout is a terminal. Coloring argocd's own output instead was ruled
+  out: icons would push its table columns out of line, and a filter on its
+  stdout would drop `app delete`'s question.
 - **restart asks `argocd app get`** which workloads are live: it takes the
   restartable kinds whose health isn't `Missing`.
 - **It stays a CLI for now.** Floating it in herdr was discussed: a
@@ -287,6 +299,12 @@ Made 2026-10-15.
   (v3.5.3).
 - Nerd Font glyphs: `glyphnames.json` in https://github.com/ryanoasis/nerd-fonts
   (`fa-heart_crack` and `fa-ghost` absent at v3.1.1, present at v3.2.0).
+- argocd's text output: `printAppResources`, `waitFormatString` and the
+  callers of `waitOnApplicationStatus`, and the `isTerminal` check in
+  `NewApplicationDeleteCommand`, in `cmd/argocd/commands/app.go` (v3.4.6).
+- Terminal width: `size` in `src/terminal/sys/unix.rs` (crossterm 0.29.0)
+  tries `/dev/tty`, then stdout, then `tput`. fish 4.9.3 keeps `COLUMNS`
+  unexported (`set -S COLUMNS`, 2026-10-15).
 - skim's preview pane: `run_preview` in `src/tui/app.rs`, `spawn` and
   `init_pty` in `src/tui/preview.rs`, the default keys in `src/binds.rs`
   (skim 5.7.4).

@@ -5,7 +5,7 @@ mod pick;
 mod view;
 
 use std::env;
-use std::io::{self, BufRead, Write};
+use std::io::{self, BufRead, IsTerminal, Write};
 use std::os::unix::process::CommandExt;
 use std::process::{self, Command, Stdio};
 use std::slice;
@@ -130,6 +130,8 @@ fn main() {
         None => println!("{}", app.name),
         Some("deploy") => deploy(app),
         Some("restart") => restart(app),
+        // aw's view of the app; given flags, argocd's own output instead.
+        Some(c @ ("get" | "refresh")) if flags.is_empty() => show(&app.name, c == "refresh"),
         Some("refresh") => exec(&argocd_args(&["app", "get", &app.name, "--refresh"], flags)),
         Some(sub) => {
             let args = argocd_args(&["app", sub, &app.name], flags);
@@ -220,11 +222,30 @@ fn preview(app: &str) {
         .ok()
         .and_then(|c| c.parse::<usize>().ok())
         .map_or(80, |c| c.saturating_sub(1));
+    print_view(&json, width, true);
+}
+
+/// Prints `app` as the preview pane shows it, refreshed first if `refresh`,
+/// laid out to the terminal's width, in color only on a terminal.
+fn show(app: &str, refresh: bool) {
+    let mut args = vec!["app", "get", app];
+    if refresh {
+        args.push("--refresh");
+    }
+    args.extend(["-o", "json"]);
+    let json = argocd_output(&args);
+    let width = crossterm::terminal::size().map_or(80, |(columns, _)| usize::from(columns));
+    print_view(&json, width, io::stdout().is_terminal());
+}
+
+/// Prints the app in `argocd app get -o json` laid out `width` columns wide.
+fn print_view(json: &str, width: usize, color: bool) {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    match view::render(&json, width, now) {
-        Ok(text) => print!("{text}"),
+    match view::render(json, width, now) {
+        Ok(text) if color => print!("{text}"),
+        Ok(text) => print!("{}", view::plain(&text)),
         Err(e) => die(&format!("can't read `argocd app get -o json`: {e}")),
     }
 }

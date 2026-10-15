@@ -168,6 +168,36 @@ fn refresh_passes_flags_to_get_without_asking() {
 }
 
 #[test]
+fn get_and_refresh_print_the_app_as_the_pane_shows_it() {
+    for (command, call) in [
+        ("g", "app get audit-log-team-apps -o json"),
+        ("r", "app get audit-log-team-apps --refresh -o json"),
+    ] {
+        let fake = Fake::new("show");
+        fs::write(fake.dir.join("get.json"), include_str!("fixtures/app.json")).unwrap();
+        let r = fake.run(&[command, "audit-log"], "", &[]);
+        assert_eq!(r.code, 0, "{command}");
+        assert_eq!(r.calls, [LIST, call]);
+        // The fake reports the fixture's app. Its stdout is no terminal, so
+        // the icons come without colors.
+        assert!(
+            r.stdout
+                .starts_with("shop-api-staging-2-orders\n\u{f0aa} OutOfSync  \u{ef4f} Degraded"),
+            "{command}: {}",
+            r.stdout
+        );
+        assert!(!r.stdout.contains('\x1b'), "{command}");
+    }
+}
+
+#[test]
+fn get_with_flags_runs_argocds_own_get() {
+    let r = Fake::new("get-flags").run(&["g", "audit-log", "--", "-o", "yaml"], "", &[]);
+    assert_eq!(r.code, 0);
+    assert_eq!(r.calls, [LIST, "app get audit-log-team-apps -o yaml"]);
+}
+
+#[test]
 fn deploy_waits_on_an_auto_sync_app_without_asking() {
     let r = Fake::new("dp-auto")
         .get_returns("OutOfSync", true)

@@ -1,6 +1,6 @@
-//! The picker's preview pane: one app as `argocd app get -o json` reports it,
-//! laid out to the pane's width, statuses in color and with Argo CD's icons,
-//! problems first.
+//! The picker's preview pane, which get and refresh print too: one app as
+//! `argocd app get -o json` reports it, laid out to a width, statuses in color
+//! and with Argo CD's icons, problems first.
 
 use std::fmt::Write;
 
@@ -126,6 +126,18 @@ pub fn render(json: &str, width: usize, now: u64) -> serde_json::Result<String> 
     conditions(&mut out, &status.conditions);
     resources(&mut out, &status.resources, &dest.namespace);
     Ok(out.text)
+}
+
+/// `text` without its SGR codes, for output that isn't a terminal.
+pub fn plain(text: &str) -> String {
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('\x1b') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at..];
+        rest = &rest[rest.find('m').map_or(rest.len(), |m| m + 1)..];
+    }
+    out + rest
 }
 
 /// "auto-sync, prune, self-heal", or "manual sync".
@@ -569,18 +581,6 @@ mod tests {
 
     /// 2026-10-15T08:20:20Z, two hours after the fixture's last sync.
     const NOW: u64 = 1_792_052_420;
-
-    /// `text` without its SGR codes.
-    fn plain(text: &str) -> String {
-        let mut out = String::new();
-        let mut rest = text;
-        while let Some(at) = rest.find('\x1b') {
-            out.push_str(&rest[..at]);
-            rest = &rest[at..];
-            rest = &rest[rest.find('m').unwrap() + 1..];
-        }
-        out + rest
-    }
 
     /// `text` with its icons spelled out, so the layout reads in an editor.
     fn named(text: &str) -> String {
