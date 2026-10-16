@@ -13,6 +13,7 @@ const FAKE_ARGOCD: &str = r#"#!/bin/sh
 echo "$*" >> "$AW_TEST_DIR/log"
 case "$*" in
   "app list -o json") cat "$AW_TEST_DIR/list.json"; exit 0 ;;
+  "app actions list "*) cat "$AW_TEST_DIR/actions.json" ;;
   *"-o json") cat "$AW_TEST_DIR/get.json" ;;
 esac
 exit "${AW_TEST_EXIT:-0}"
@@ -65,6 +66,13 @@ impl Fake {
             resources.join(",")
         );
         fs::write(self.dir.join("get.json"), json).unwrap();
+        self
+    }
+
+    /// Makes `argocd app actions list … -o json` list these actions.
+    fn actions(self, actions: &[&str]) -> Self {
+        let json = format!("[{}]", actions.join(","));
+        fs::write(self.dir.join("actions.json"), json).unwrap();
         self
     }
 
@@ -289,6 +297,67 @@ fn restart_needs_a_live_workload() {
     }
 }
 
+const GET_AUDIT_LOG: &str = "app get audit-log-team-apps -o json";
+const ACTIONS_AUDIT_LOG: &str = "app actions list audit-log-team-apps --kind Rollout -o json";
+
+/// The audit-log Rollout in `app get -o json`, with this health.
+fn audit_log_rollout(health: &str) -> String {
+    format!(
+        r#"{{"group":"argoproj.io","kind":"Rollout","namespace":"team-apps-audit-log","name":"audit-log","health":{{"status":"{health}"}}}}"#
+    )
+}
+
+/// One of its actions in `app actions list -o json`.
+fn audit_log_action(action: &str, disabled: bool) -> String {
+    format!(
+        r#"{{"Group":"argoproj.io","Kind":"Rollout","Name":"audit-log","Action":"{action}","Disabled":{disabled}}}"#
+    )
+}
+
+#[test]
+fn retry_asks_then_retries_the_only_aborted_rollout() {
+    let r = Fake::new("rt")
+        .get_resources(&[
+            r#"{"group":"apps","kind":"Deployment","namespace":"team-apps-audit-log","name":"audit-log-worker","health":{"status":"Healthy"}}"#,
+            &audit_log_rollout("Degraded"),
+        ])
+        .actions(&[
+            &audit_log_action("restart", false),
+            &audit_log_action("retry", false),
+        ])
+        .run(&["rt", "audit-log"], "y\n", &[]);
+    let retry = "app actions run audit-log-team-apps retry --kind Rollout --group argoproj.io \
+                 --namespace team-apps-audit-log --resource-name audit-log";
+    assert_eq!(r.code, 0);
+    assert!(
+        r.stderr
+            .contains(&format!("argocd {retry}\non prod-eu-1. Run it? [y/N]"))
+    );
+    assert_eq!(r.calls, [LIST, GET_AUDIT_LOG, ACTIONS_AUDIT_LOG, retry]);
+}
+
+#[test]
+fn retry_needs_an_aborted_rollout() {
+    // A Rollout whose retry Argo CD has disabled: it isn't aborted.
+    let r = Fake::new("rt-disabled")
+        .get_resources(&[&audit_log_rollout("Healthy")])
+        .actions(&[&audit_log_action("retry", true)])
+        .run(&["rt", "audit-log"], "y\n", &[]);
+    assert_eq!(r.code, 1);
+    assert!(
+        r.stderr
+            .contains("audit-log-team-apps has no aborted Rollout to retry")
+    );
+    assert_eq!(r.calls, [LIST, GET_AUDIT_LOG, ACTIONS_AUDIT_LOG]);
+
+    // A Rollout in git but not live: actions list would fail, so isn't run.
+    let r = Fake::new("rt-missing")
+        .get_resources(&[&audit_log_rollout("Missing")])
+        .run(&["rt", "audit-log"], "y\n", &[]);
+    assert_eq!(r.code, 1);
+    assert_eq!(r.calls, [LIST, GET_AUDIT_LOG]);
+}
+
 #[test]
 fn preview_lays_out_app_get_for_the_pane() {
     let fake = Fake::new("preview");
@@ -319,10 +388,11 @@ fn without_colors(text: &str) -> String {
 
 #[test]
 fn bad_command_lines_exit_2_before_calling_argocd() {
-    let cases: [&[&str]; 4] = [
+    let cases: [&[&str]; 5] = [
         &["actions", "audit-log"],
         &["l", "audit-log", "-f"],
         &["dp", "audit-log", "--", "--timeout", "60"],
+        &["rt", "audit-log", "--", "--all"],
         &["audit-log", "--", "-f"],
     ];
     for args in cases {

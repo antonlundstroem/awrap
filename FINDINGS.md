@@ -85,6 +85,34 @@ instance go in the gitignored `FINDINGS.local.md`. Sources at the end.
 - Many apps have no restartable workload: CRD and ApplicationSet bundles,
   KEDA ScaledJobs, CronJobs.
 
+## Retrying an aborted rollout
+
+- An Argo Rollouts analysis that fails aborts its Rollout, whose health
+  message then starts `RolloutAborted: Rollout aborted update to revision N:`
+  and quotes the analysis. The failed AnalysisRun is never rerun; what gets
+  retried is the Rollout (`kubectl argo rollouts retry` takes a rollout or an
+  experiment).
+- `argocd app actions run <app> retry --kind Rollout --resource-name <name>`
+  is built in. It clears `status.abort` through the status subresource, as
+  `kubectl argo rollouts retry rollout` sets `abort: false`, but through the
+  Argo API and its RBAC (`action/argoproj.io/Rollout/retry`). It is enabled
+  only while the rollout is aborted and not fully promoted.
+- `argocd app actions list <app> --kind Rollout -o json` lists each action as
+  `Group`, `Kind`, `Name`, `Action` and `Disabled`, without the namespace.
+  With no Rollout live it fails: "no matching resource found".
+- An aborted canary waits at step 0, so a retry runs every step again, with
+  new AnalysisRuns made from the templates as they are then; a run whose name
+  is taken gets a `.1`, `.2`, … suffix.
+- A change to the Rollout's pod template or canary steps starts a new update
+  and clears the abort itself, without a retry.
+- `restart` is no retry. On a Rollout it sets `spec.restartAt` to now, and
+  the controller evicts the pods created before then, `maxUnavailable` (at
+  least one) at a time, stable ReplicaSet first: same revision, no steps, no
+  analysis. Only a pod template or steps change, `promote-full`, a rollback,
+  full promotion or the retry clear an abort.
+- `argocd app sync --retry-limit` and the other `--retry-*` flags retry a
+  failed sync, not an analysis.
+
 ## The preview pane
 
 - `argocd app get -o json` has all the pane shows: sync status with the
@@ -157,6 +185,7 @@ argocd app logs <app> --kind Deployment --name <name> -f --tail 100
 argocd app sync <app> [--preview-changes] [--resource GROUP:KIND:NAME]   # core group is blank: :ConfigMap:<name>
 argocd app wait <app> --sync --health --timeout 900
 argocd app actions run <app> restart --kind Deployment --resource-name <name>
+argocd app actions run <app> retry --kind Rollout --resource-name <name>   # after a failed analysis
 argocd app terminate-op <app>                                  # kill a stuck sync
 argocd appset get <name>
 argocd completion fish > ~/.config/fish/completions/argocd.fish
@@ -254,6 +283,15 @@ Made 2026-10-15.
   app-first flow (pick the app, then the action) that keeps output on
   screen; not built.
 
+Made 2026-10-16.
+
+- **retry** (`rt`) offers the app's aborted Rollouts: the live ones in
+  `argocd app get` whose `retry` action `argocd app actions list` shows
+  enabled. That is Argo CD's own test, where matching the `RolloutAborted:`
+  health message would lean on a message's wording. It skips `actions list`
+  when no Rollout is live, as that fails then. Like restart, it asks first,
+  takes a single Rollout directly and opens the second picker for several.
+
 ## Sources
 
 - CLI reference: https://argo-cd.readthedocs.io/en/stable/user-guide/commands/argocd/
@@ -283,6 +321,28 @@ Made 2026-10-15.
 - Restart actions: `resource_customizations/apps/Deployment/actions/discovery.lua`
   in https://github.com/argoproj/argo-cd (v3.5.3); StatefulSet, DaemonSet and
   Rollout from `argocd app actions list`, 2026-10-14.
+- Rollout retry: `discovery.lua` and `retry/action.lua` in
+  `resource_customizations/argoproj.io/Rollout/actions/`, and
+  `RunResourceActionV2` and `patchResource` in
+  `server/application/application.go` (argo-cd v3.5.3);
+  `pkg/kubectl-argo-rollouts/cmd/retry/retry.go`, `syncRolloutStatusCanary`
+  in `rollout/canary.go`, `resetRolloutStatus` in `rollout/sync.go`,
+  `PodTemplateOrStepsChanged` in `utils/replicaset/replicaset.go`,
+  `newAnalysisRunFromRollout` in `rollout/analysis.go` and
+  `CreateWithCollisionCounter` in `utils/analysis/helpers.go`, in
+  https://github.com/argoproj/argo-rollouts (v1.8.3); the `--retry-*` flags
+  from `argocd app sync --help` (v3.4.6).
+- The `RolloutAborted:` health message: `GetRolloutPhase` in
+  `utils/rollout/rolloututil.go` (argo-rollouts v1.8.3) writes
+  `<reason>: <message>` to `status.message`, which
+  `resource_customizations/argoproj.io/Rollout/health.lua` (argo-cd v3.5.3)
+  passes through. `actions list`: `DisplayedAction` in
+  `cmd/argocd/commands/app_actions.go` and `FilterResources` in
+  `cmd/util/app.go` (argocd v3.4.6), and its `-o json` on a v3.5.3 instance,
+  2026-10-16.
+- Rollout restart: `resource_customizations/argoproj.io/Rollout/actions/restart/action.lua`
+  (argo-cd v3.5.3); `Reconcile` in `rollout/restart.go` and the callers of
+  `RemoveAbort` in `rollout/` (argo-rollouts v1.8.3).
 - `--hard-refresh` beats `--refresh`: `getRefreshType` in
   `cmd/argocd/commands/app.go` (v3.4.6).
 - Resource health in `app get` but not `app list`: `inferResourcesStatusHealth`

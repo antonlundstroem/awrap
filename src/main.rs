@@ -23,6 +23,7 @@ usage:
 commands:
   g  get        d  diff       s  sync*      l  logs       h  history
   m  manifests  w  wait       r  refresh    rs restart*   dp deploy*
+  rt retry*
   and every other `argocd app` subcommand that takes an app name, by full name
 
 A query that is an app's exact name, or appears in only one app's name, skips
@@ -32,7 +33,7 @@ manual sync); AW_YES=1 stops the asking.
 ";
 
 /// Short names, and the full names of `aw`'s own commands.
-const SHORT: [(&str, &str); 10] = [
+const SHORT: [(&str, &str); 11] = [
     ("g", "get"),
     ("d", "diff"),
     ("s", "sync"),
@@ -42,11 +43,12 @@ const SHORT: [(&str, &str); 10] = [
     ("w", "wait"),
     ("r", "refresh"),
     ("rs", "restart"),
+    ("rt", "retry"),
     ("dp", "deploy"),
 ];
 
 /// `aw`'s own commands, which are not `argocd app` subcommands.
-const OWN: [&str; 3] = ["refresh", "restart", "deploy"];
+const OWN: [&str; 4] = ["refresh", "restart", "retry", "deploy"];
 
 /// `argocd app` subcommands whose first argument is an app name.
 const PASSTHROUGH: [&str; 21] = [
@@ -118,7 +120,7 @@ fn main() {
     }
     match (command, flags.is_empty()) {
         (None, false) => usage_error("flags after -- need a command, as in: aw logs <query> -- -f"),
-        (Some(c @ ("deploy" | "restart")), false) => {
+        (Some(c @ ("deploy" | "restart" | "retry")), false) => {
             usage_error(&format!("{c} takes no argocd flags"))
         }
         _ => {}
@@ -130,6 +132,7 @@ fn main() {
         None => println!("{}", app.name),
         Some("deploy") => deploy(app),
         Some("restart") => restart(app),
+        Some("retry") => retry(app),
         // aw's view of the app; given flags, argocd's own output instead.
         Some(c @ ("get" | "refresh")) if flags.is_empty() => show(&app.name, c == "refresh"),
         Some("refresh") => exec(&argocd_args(&["app", "get", &app.name, "--refresh"], flags)),
@@ -252,14 +255,48 @@ fn print_view(json: &str, width: usize, color: bool) {
 
 /// Restarts the app's only live workload, or the ones picked.
 fn restart(app: &App) -> ! {
+    act(
+        app,
+        "restart",
+        live_workloads(app),
+        "live Deployment, StatefulSet, DaemonSet or Rollout",
+    )
+}
+
+/// Retries the app's only aborted Rollout, or the ones picked.
+fn retry(app: &App) -> ! {
+    let rollouts: Vec<_> = live_workloads(app)
+        .into_iter()
+        .filter(|w| w.kind == "Rollout")
+        .collect();
+    // `actions list --kind Rollout` fails when no Rollout is live.
+    let aborted = if rollouts.is_empty() {
+        rollouts
+    } else {
+        let json = argocd_output(&[
+            "app", "actions", "list", &app.name, "--kind", "Rollout", "-o", "json",
+        ]);
+        apps::parse_retryable(&json, rollouts).unwrap_or_else(|e| {
+            die(&format!(
+                "can't read `argocd app actions list -o json`: {e}"
+            ))
+        })
+    };
+    act(app, "retry", aborted, "aborted Rollout")
+}
+
+/// The app's live workloads, from `argocd app get -o json`.
+fn live_workloads(app: &App) -> Vec<Workload> {
     let json = argocd_output(&["app", "get", &app.name, "-o", "json"]);
-    let workloads = apps::parse_workloads(&json)
-        .unwrap_or_else(|e| die(&format!("can't read `argocd app get -o json`: {e}")));
+    apps::parse_workloads(&json)
+        .unwrap_or_else(|e| die(&format!("can't read `argocd app get -o json`: {e}")))
+}
+
+/// Runs the resource action on the only one of `workloads`, or on the ones
+/// picked, after asking. `what` names them, for when there are none.
+fn act(app: &App, action: &str, workloads: Vec<Workload>, what: &str) -> ! {
     let chosen = match workloads.len() {
-        0 => die(&format!(
-            "{} has no live Deployment, StatefulSet, DaemonSet or Rollout to restart",
-            app.name
-        )),
+        0 => die(&format!("{} has no {what} to {action}", app.name)),
         1 => workloads,
         _ => match pick::workloads(&workloads) {
             Ok(picked) if picked.is_empty() => process::exit(130),
@@ -267,7 +304,7 @@ fn restart(app: &App) -> ! {
             Err(e) => die(&format!("picker failed: {e}")),
         },
     };
-    let commands: Vec<_> = chosen.iter().map(|w| restart_args(app, w)).collect();
+    let commands: Vec<_> = chosen.iter().map(|w| action_args(app, action, w)).collect();
     confirm(&commands, app);
     for command in &commands {
         run(command);
@@ -275,10 +312,10 @@ fn restart(app: &App) -> ! {
     process::exit(0)
 }
 
-fn restart_args(app: &App, w: &Workload) -> Vec<String> {
+fn action_args(app: &App, action: &str, w: &Workload) -> Vec<String> {
     let mut args = argocd_args(
         &[
-            "app", "actions", "run", &app.name, "restart", "--kind", &w.kind,
+            "app", "actions", "run", &app.name, action, "--kind", &w.kind,
         ],
         &[],
     );

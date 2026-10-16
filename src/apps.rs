@@ -55,6 +55,26 @@ pub fn parse_workloads(json: &str) -> serde_json::Result<Vec<Workload>> {
         .collect())
 }
 
+/// Those of `rollouts` whose `retry` action is enabled, which Argo CD does
+/// while a rollout is aborted and not fully promoted, going by
+/// `argocd app actions list --kind Rollout -o json`. That names no namespace,
+/// so a Rollout matches on its group, kind and name.
+pub fn parse_retryable(json: &str, rollouts: Vec<Workload>) -> serde_json::Result<Vec<Workload>> {
+    let actions: Vec<RawAction> = serde_json::from_str(json)?;
+    Ok(rollouts
+        .into_iter()
+        .filter(|w| {
+            actions.iter().any(|a| {
+                a.action == "retry"
+                    && !a.disabled
+                    && a.group == w.group
+                    && a.kind == w.kind
+                    && a.name == w.name
+            })
+        })
+        .collect())
+}
+
 /// The app `query` names on its own: an exact name, or the only name that
 /// contains it.
 pub fn resolve<'a>(apps: &'a [App], query: &str) -> Option<&'a App> {
@@ -142,6 +162,17 @@ struct RawResource {
     health: Option<RawState>,
 }
 
+/// A row of `argocd app actions list -o json`.
+#[derive(Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct RawAction {
+    group: String,
+    kind: String,
+    name: String,
+    action: String,
+    disabled: bool,
+}
+
 impl From<RawApp> for App {
     fn from(raw: RawApp) -> Self {
         let dest = raw.spec.destination;
@@ -201,6 +232,26 @@ mod tests {
         // Not shop-api-cron, a Deployment in git but not live, nor the
         // ScaledJob or the Job.
         assert_eq!(names, ["shop-api", "shop-api-worker", "bg-shop-api"]);
+    }
+
+    #[test]
+    fn retryable_rollouts_are_those_whose_retry_is_enabled() {
+        let rollout = |name: &str| Workload {
+            group: "argoproj.io".to_string(),
+            kind: "Rollout".to_string(),
+            namespace: "shop-api".to_string(),
+            name: name.to_string(),
+        };
+        let json = r#"[
+            {"Group":"argoproj.io","Kind":"Rollout","Name":"aborted","Action":"restart","Disabled":false},
+            {"Group":"argoproj.io","Kind":"Rollout","Name":"aborted","Action":"retry","Disabled":false},
+            {"Group":"argoproj.io","Kind":"Rollout","Name":"promoted","Action":"restart","Disabled":false},
+            {"Group":"argoproj.io","Kind":"Rollout","Name":"promoted","Action":"retry","Disabled":true}
+        ]"#;
+        let rollouts = vec![rollout("aborted"), rollout("promoted"), rollout("unlisted")];
+        let retryable = parse_retryable(json, rollouts).unwrap();
+        let names: Vec<_> = retryable.iter().map(|w| w.name.as_str()).collect();
+        assert_eq!(names, ["aborted"]);
     }
 
     #[test]

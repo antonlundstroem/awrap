@@ -43,6 +43,7 @@ aw <command> [query] [-- flags]    pick an app, run the command on it
 | `w`   | wait      | `argocd app wait <app>`                               |
 | `r`   | refresh   | `argocd app get <app> --refresh`, shown the same way  |
 | `rs`  | restart   | `argocd app actions run <app> restart …`, after asking |
+| `rt`  | retry     | `argocd app actions run <app> retry …`, after asking  |
 | `dp`  | deploy    | refresh, sync if needed, wait                         |
 
 Every other `argocd app` subcommand that takes an app name works under its
@@ -52,7 +53,7 @@ app name goes, e.g. `argocd app actions run (aw billing) …` in fish
 (`$(aw billing)` in bash).
 
 Flags after `--` go to `argocd`: `aw l billing -- -f --tail 100`,
-`aw r billing -- --hard-refresh`. deploy and restart take none.
+`aw r billing -- --hard-refresh`. deploy, restart and retry take none.
 
 ### Finding the app
 
@@ -101,8 +102,17 @@ Restarts the app's live Deployments, StatefulSets, DaemonSets and Argo
 Rollouts. With one, it is used directly; with several, a second picker opens,
 where Tab marks more than one.
 
+### retry
+
+Retries the app's aborted Argo Rollouts, such as one whose analysis failed:
+the update starts over from its first step, with new analysis runs. It offers
+the Rollouts that `argocd app actions list` shows `retry` enabled for. With
+one, it is used directly; with several, the second picker opens. Restarting
+an aborted Rollout doesn't retry it: the pods are replaced, and the rollout
+stays aborted.
+
 ## Exit codes
 
 The argocd command's own when `aw` ran one. 130 when you leave a picker with
-Esc; 1 when you answer no, there is nothing to restart, or argocd can't run;
-2 for a bad `aw` command line.
+Esc; 1 when you answer no, there is nothing to restart or retry, or argocd
+can't run; 2 for a bad `aw` command line.
